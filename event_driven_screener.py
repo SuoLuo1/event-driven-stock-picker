@@ -79,8 +79,45 @@ def get_stock_fund_flow():
 
 # ==================== 事件分析函数 ====================
 
+def fetch_full_article(url):
+    """用Jina Reader获取完整新闻内容"""
+    try:
+        import urllib.request
+        jina_url = f"https://r.jina.ai/{url}"
+        with urllib.request.urlopen(jina_url, timeout=10) as response:
+            return response.read().decode('utf-8')
+    except Exception as e:
+        return None
+
+def analyze_news_with_llm(title, content, article_text):
+    """用大模型分析新闻是否有产业事件"""
+    # 简化版：用关键词匹配+简单规则
+    # 实际应该用大模型API，这里先做基础版
+    
+    events = {
+        'order': 0,
+        'tech_breakthrough': 0,
+        'capacity_expansion': 0,
+        'price_increase': 0,
+        'policy_support': 0,
+    }
+    
+    # 合并所有文本
+    full_text = title + ' ' + content
+    if article_text:
+        full_text += ' ' + article_text[:1000]  # 只取前1000字
+    
+    # 关键词匹配
+    for event_type, keywords in EVENT_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in full_text:
+                events[event_type] += 1
+                break
+    
+    return events
+
 def analyze_news_events(df_news, stock_name):
-    """分析新闻中的事件信号"""
+    """分析新闻中的事件信号（增强版）"""
     if df_news is None or len(df_news) == 0:
         return {}
     
@@ -92,10 +129,14 @@ def analyze_news_events(df_news, stock_name):
         'policy_support': 0,
     }
     
-    # 只分析近30天的新闻
+    # 只分析近30天的新闻，最多分析前5条
     cutoff_date = datetime.now() - timedelta(days=30)
+    analyzed = 0
     
     for _, row in df_news.iterrows():
+        if analyzed >= 5:  # 最多分析5条
+            break
+            
         # 检查日期
         try:
             news_date = pd.to_datetime(row['发布时间'])
@@ -106,14 +147,23 @@ def analyze_news_events(df_news, stock_name):
         
         title = str(row.get('新闻标题', ''))
         content = str(row.get('新闻内容', ''))
-        text = title + ' ' + content
+        news_link = row.get('新闻链接', '')
         
-        # 统计各类事件关键词
-        for event_type, keywords in EVENT_KEYWORDS.items():
-            for keyword in keywords:
-                if keyword in text:
-                    events[event_type] += 1
-                    break
+        # 获取完整文章内容（如果有链接）
+        article_text = None
+        if news_link and 'eastmoney.com' in news_link:
+            article_text = fetch_full_article(news_link)
+            if article_text:
+                time.sleep(1)  # 限速
+        
+        # 分析事件
+        news_events = analyze_news_with_llm(title, content, article_text)
+        
+        # 累加事件
+        for event_type in events:
+            events[event_type] += news_events[event_type]
+        
+        analyzed += 1
     
     return events
 
