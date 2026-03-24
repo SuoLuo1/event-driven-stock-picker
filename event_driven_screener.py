@@ -255,6 +255,10 @@ def main():
         code = str(stock['股票代码']).zfill(6)
         name = stock['股票简称']
         
+        # 过滤科创板(688)和北交所(8/9开头)
+        if code.startswith('688') or code.startswith('8') or code.startswith('9'):
+            continue
+        
         # 检查是否在业绩拐点列表
         fin_match = df_growth[df_growth['股票代码'] == code]
         if len(fin_match) == 0:
