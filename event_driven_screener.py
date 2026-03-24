@@ -25,11 +25,12 @@ EVENT_KEYWORDS = {
 
 # 筛选条件
 FILTERS = {
-    'revenue_growth_min': 30,      # 营收增速 > 30%（拐点）
-    'gross_margin_up': True,        # 毛利率提升
-    'news_count_min': 1,            # 近30天相关新闻 >= 1条（降低门槛）
-    'main_inflow_positive': True,   # 主力资金流入为正
-    'score_min': 50,                # 综合得分 >= 50分（降低门槛）
+    'revenue_growth_min': 20,      # 营收增速 > 20%（更早发现拐点）
+    'gross_margin_up': False,       # 不强制毛利率提升
+    'news_count_min': 1,            # 近30天相关新闻 >= 1条
+    'main_inflow_positive': False,  # 不强制资金流入（好股启动前未必流入）
+    'score_min': 40,                # 综合得分 >= 40分
+    'analyze_count': 100,           # 分析前100只股票
 }
 
 # 限速配置
@@ -240,19 +241,17 @@ def main():
     print(f"  获取到 {len(df_fund)} 只股票资金流")
     print()
     
-    # 步骤3：筛选资金流入的股票
-    print("【步骤3】筛选资金流入的股票...")
-    if FILTERS['main_inflow_positive']:
-        df_fund = df_fund[df_fund['净额_万'] > 0]
-    print(f"  资金流入: {len(df_fund)}只")
+    # 步骤3：不强制筛选资金流入，保留所有
+    print("【步骤3】保留所有股票（不强制资金流入）...")
+    print(f"  总股票数: {len(df_fund)}只")
     print()
     
-    # 步骤4：新闻事件分析（只分析前50只）
+    # 步骤4：新闻事件分析（分析前100只，按资金排序）
     print("【步骤4】新闻事件分析...")
-    print("  分析资金流入前50只股票的新闻...")
+    print(f"  分析前{FILTERS['analyze_count']}只股票的新闻+公告...")
     
     results = []
-    for i, (_, stock) in enumerate(df_fund.head(50).iterrows()):
+    for i, (_, stock) in enumerate(df_fund.head(FILTERS['analyze_count']).iterrows()):
         code = str(stock['股票代码']).zfill(6)
         name = stock['股票简称']
         
@@ -287,33 +286,39 @@ def main():
         if total_events < FILTERS['news_count_min']:
             continue
         
-        # 计算得分
+        # 计算得分（新版权重：事件>业绩>资金）
         score = 0
         
-        # 营收增速 20分
+        # 营收增速 15分（降低权重，更早发现）
         if revenue_growth > 100:
-            score += 20
+            score += 15
         elif revenue_growth > 50:
-            score += 15
+            score += 12
+        elif revenue_growth > 30:
+            score += 10
         else:
-            score += 10
+            score += 8
         
-        # 事件信号 40分
+        # 事件信号 50分（核心：订单/技术/扩产）
         if events['order'] > 0:
-            score += 15
+            score += 20  # 订单最重要
         if events['tech_breakthrough'] > 0:
-            score += 15
+            score += 15  # 技术突破
         if events['capacity_expansion'] > 0:
-            score += 10
+            score += 10  # 扩产
+        if events['policy_support'] > 0:
+            score += 5   # 政策支持
         
-        # 资金流向 20分
+        # 资金流向 10分（降低权重，不强制）
         inflow = float(stock['净额_万'])
         if inflow > 50000:
-            score += 20
-        elif inflow > 20000:
-            score += 15
-        else:
             score += 10
+        elif inflow > 20000:
+            score += 8
+        elif inflow > 0:
+            score += 5
+        else:
+            score += 2   # 资金流出也给2分（不歧视）
         
         if score >= FILTERS['score_min']:
             results.append({
@@ -333,7 +338,7 @@ def main():
             })
         
         if (i + 1) % 10 == 0:
-            print(f"  已分析 {i+1}/50 只...")
+            print(f"  已分析 {i+1}/{FILTERS['analyze_count']} 只...")
     
     print(f"\n  事件分析完成，{len(results)}只符合条件")
     print()
