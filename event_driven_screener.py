@@ -68,6 +68,15 @@ def get_stock_news(symbol):
     except Exception as e:
         return None
 
+def get_stock_notice(symbol):
+    """获取个股公告（cninfo，限速）"""
+    try:
+        rate_limit()
+        df = ak.stock_zh_a_disclosure_report_cninfo(symbol=symbol)
+        return df
+    except Exception as e:
+        return None
+
 def get_stock_fund_flow():
     """获取个股资金流（同花顺）"""
     try:
@@ -138,6 +147,49 @@ def analyze_news_events(df_news, stock_name):
         # 累加事件
         for event_type in events:
             events[event_type] += news_events[event_type]
+    
+    return events
+
+def analyze_notice_events(df_notice, stock_name):
+    """分析公告中的事件信号"""
+    if df_notice is None or len(df_notice) == 0:
+        return {}
+    
+    events = {
+        'order': 0,
+        'tech_breakthrough': 0,
+        'capacity_expansion': 0,
+        'price_increase': 0,
+        'policy_support': 0,
+    }
+    
+    # 只分析近30天的公告
+    cutoff_date = datetime.now() - timedelta(days=30)
+    
+    # 过滤关键词（只关注产业事件，过滤股东行为）
+    FILTER_OUT = ['质押', '减持', '增持', '回购', '分红', '派息', '董事会', '监事会', '股东大会']
+    
+    for _, row in df_notice.iterrows():
+        # 检查日期
+        try:
+            notice_date = pd.to_datetime(row['公告时间'])
+            if notice_date < cutoff_date:
+                continue
+        except:
+            continue
+        
+        title = str(row.get('公告标题', ''))
+        
+        # 过滤无关公告
+        if any(keyword in title for keyword in FILTER_OUT):
+            continue
+        
+        # 分析事件
+        notice_events = analyze_content_events(title)
+        
+        # 累加事件
+        for event_type in events:
+            events[event_type] += notice_events[event_type]
     
     return events
 
@@ -213,13 +265,23 @@ def main():
         revenue_growth = fin['营收增速']
         profit_growth = fin['净利润增速']
         
-        # 获取新闻
+        # 获取新闻和公告
         df_news = get_stock_news(code)
-        if df_news is None:
-            continue
+        df_notice = get_stock_notice(code)
         
         # 分析事件
-        events = analyze_news_events(df_news, name)
+        news_events = analyze_news_events(df_news, name) if df_news is not None else {}
+        notice_events = analyze_notice_events(df_notice, name) if df_notice is not None else {}
+        
+        # 合并事件
+        events = {
+            'order': news_events.get('order', 0) + notice_events.get('order', 0),
+            'tech_breakthrough': news_events.get('tech_breakthrough', 0) + notice_events.get('tech_breakthrough', 0),
+            'capacity_expansion': news_events.get('capacity_expansion', 0) + notice_events.get('capacity_expansion', 0),
+            'price_increase': news_events.get('price_increase', 0) + notice_events.get('price_increase', 0),
+            'policy_support': news_events.get('policy_support', 0) + notice_events.get('policy_support', 0),
+        }
+        
         total_events = sum(events.values())
         
         if total_events < FILTERS['news_count_min']:
