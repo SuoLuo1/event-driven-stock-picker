@@ -14,22 +14,22 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==================== 配置 ====================
 
-# 事件关键词（产业趋势信号）
+# 事件关键词（产业趋势信号）- 扩大范围
 EVENT_KEYWORDS = {
-    'order': ['订单', '合同', '中标', '签订', '大单', '采购', '供货', '合作'],
-    'tech_breakthrough': ['量产', '突破', '国产化', '替代进口', '技术领先', '专利'],
-    'capacity_expansion': ['扩产', '投产', '新建', '产能', '产线', '工厂'],
-    'price_increase': ['涨价', '供不应求', '库存下降', '紧缺', '价格上调'],
-    'policy_support': ['国家战略', '专项资金', '扶持政策', '产业规划'],
+    'order': ['订单', '合同', '中标', '签订', '大单', '采购', '供货', '合作', '协议', '项目', '客户', '交付'],
+    'tech_breakthrough': ['量产', '突破', '国产化', '替代进口', '技术领先', '专利', '研发', '创新', '新品', '新产品', '发布', '推出', '问世'],
+    'capacity_expansion': ['扩产', '投产', '新建', '产能', '产线', '工厂', '基地', '扩建', '增产', '加码'],
+    'price_increase': ['涨价', '供不应求', '库存下降', '紧缺', '价格上调', '提价', '涨价潮', '供应紧张'],
+    'policy_support': ['国家战略', '专项资金', '扶持政策', '产业规划', '补贴', '利好', '政策支持', '十四五', '新质生产力'],
 }
 
 # 筛选条件
 FILTERS = {
     'revenue_growth_min': 30,      # 营收增速 > 30%（拐点）
     'gross_margin_up': True,        # 毛利率提升
-    'news_count_min': 3,            # 近30天相关新闻 >= 3条
+    'news_count_min': 1,            # 近30天相关新闻 >= 1条（降低门槛）
     'main_inflow_positive': True,   # 主力资金流入为正
-    'score_min': 60,                # 综合得分 >= 60分
+    'score_min': 50,                # 综合得分 >= 50分（降低门槛）
 }
 
 # 限速配置
@@ -79,21 +79,8 @@ def get_stock_fund_flow():
 
 # ==================== 事件分析函数 ====================
 
-def fetch_full_article(url):
-    """用Jina Reader获取完整新闻内容"""
-    try:
-        import urllib.request
-        jina_url = f"https://r.jina.ai/{url}"
-        with urllib.request.urlopen(jina_url, timeout=10) as response:
-            return response.read().decode('utf-8')
-    except Exception as e:
-        return None
-
-def analyze_news_with_llm(title, content, article_text):
-    """用大模型分析新闻是否有产业事件"""
-    # 简化版：用关键词匹配+简单规则
-    # 实际应该用大模型API，这里先做基础版
-    
+def analyze_content_events(text):
+    """分析文本中的事件信号"""
     events = {
         'order': 0,
         'tech_breakthrough': 0,
@@ -102,15 +89,13 @@ def analyze_news_with_llm(title, content, article_text):
         'policy_support': 0,
     }
     
-    # 合并所有文本
-    full_text = title + ' ' + content
-    if article_text:
-        full_text += ' ' + article_text[:1000]  # 只取前1000字
+    if not text:
+        return events
     
     # 关键词匹配
     for event_type, keywords in EVENT_KEYWORDS.items():
         for keyword in keywords:
-            if keyword in full_text:
+            if keyword in text:
                 events[event_type] += 1
                 break
     
@@ -129,14 +114,10 @@ def analyze_news_events(df_news, stock_name):
         'policy_support': 0,
     }
     
-    # 只分析近30天的新闻，最多分析前5条
+    # 只分析近30天的新闻
     cutoff_date = datetime.now() - timedelta(days=30)
-    analyzed = 0
     
     for _, row in df_news.iterrows():
-        if analyzed >= 5:  # 最多分析5条
-            break
-            
         # 检查日期
         try:
             news_date = pd.to_datetime(row['发布时间'])
@@ -147,23 +128,16 @@ def analyze_news_events(df_news, stock_name):
         
         title = str(row.get('新闻标题', ''))
         content = str(row.get('新闻内容', ''))
-        news_link = row.get('新闻链接', '')
         
-        # 获取完整文章内容（如果有链接）
-        article_text = None
-        if news_link and 'eastmoney.com' in news_link:
-            article_text = fetch_full_article(news_link)
-            if article_text:
-                time.sleep(1)  # 限速
+        # 合并标题+内容
+        full_text = title + ' ' + content
         
         # 分析事件
-        news_events = analyze_news_with_llm(title, content, article_text)
+        news_events = analyze_content_events(full_text)
         
         # 累加事件
         for event_type in events:
             events[event_type] += news_events[event_type]
-        
-        analyzed += 1
     
     return events
 
