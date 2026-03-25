@@ -246,12 +246,18 @@ def main():
     print(f"  总股票数: {len(df_fund)}只")
     print()
     
-    # 步骤4：新闻事件分析（分析前100只，按资金排序）
+    # 步骤4：新闻事件分析（分析全部主板+创业板股票）
     print("【步骤4】新闻事件分析...")
-    print(f"  分析前{FILTERS['analyze_count']}只股票的新闻+公告...")
+    print("  分析全部主板+创业板股票的新闻+公告...")
+    
+    # 过滤科创板和北交所
+    df_fund_filtered = df_fund[~df_fund['股票代码'].astype(str).str.startswith(('688', '8', '9'))].copy()
+    print(f"  过滤后剩余: {len(df_fund_filtered)}只（主板+创业板）")
+    print()
     
     results = []
-    for i, (_, stock) in enumerate(df_fund.head(FILTERS['analyze_count']).iterrows()):
+    total_stocks = len(df_fund_filtered)
+    for i, (_, stock) in enumerate(df_fund_filtered.iterrows()):
         code = str(stock['股票代码']).zfill(6)
         name = stock['股票简称']
         
@@ -341,8 +347,8 @@ def main():
                 '得分': score,
             })
         
-        if (i + 1) % 10 == 0:
-            print(f"  已分析 {i+1}/{FILTERS['analyze_count']} 只...")
+        if (i + 1) % 100 == 0:
+            print(f"  已分析 {i+1}/{total_stocks} 只...")
     
     print(f"\n  事件分析完成，{len(results)}只符合条件")
     print()
