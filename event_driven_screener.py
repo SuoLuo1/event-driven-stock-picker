@@ -377,12 +377,13 @@ def main():
         if r['政策支持'] > 0:
             print(f"      - 政策支持: {r['政策支持']}条")
     
-    # 保存结果
+    # 保存结果（保存全部符合条件的股票）
     output_file = f"/tmp/event_driven_stocks_{datetime.now().strftime('%Y%m%d')}.json"
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump({
             'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'top_stocks': results[:20]
+            'total_count': len(results),
+            'top_stocks': results  # 保存全部，不只是前20
         }, f, ensure_ascii=False, indent=2)
     
     print(f"\n✅ 结果已保存: {output_file}")
