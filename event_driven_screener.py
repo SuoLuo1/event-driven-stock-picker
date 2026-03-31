@@ -227,17 +227,26 @@ def main():
         print("资金流获取失败，退出")
         return
     
-    # 转换净额
+    # 转换净额（处理新的数据格式）
     def parse_amount(x):
+        if pd.isna(x):
+            return 0
         if isinstance(x, str):
-            x = x.replace(',', '')
-            if '亿' in x:
-                return float(x.replace('亿', '')) * 10000
-            elif '万' in x:
-                return float(x.replace('万', ''))
+            x = x.replace(',', '').replace('万', '').replace('亿', '')
+            if '亿' in str(x):
+                return float(x) * 10000
+            else:
+                return float(x)
         return float(x)
     
-    df_fund['净额_万'] = df_fund['净额'].apply(parse_amount)
+    # 确保净额列存在
+    if '净额' in df_fund.columns:
+        df_fund['净额_万'] = df_fund['净额'].apply(parse_amount)
+    else:
+        # 如果没有净额列，用流入-流出计算
+        df_fund['流入资金_万'] = df_fund['流入资金'].apply(parse_amount)
+        df_fund['流出资金_万'] = df_fund['流出资金'].apply(parse_amount)
+        df_fund['净额_万'] = df_fund['流入资金_万'] - df_fund['流出资金_万']
     print(f"  获取到 {len(df_fund)} 只股票资金流")
     print()
     
@@ -258,7 +267,9 @@ def main():
     results = []
     total_stocks = len(df_fund_filtered)
     for i, (_, stock) in enumerate(df_fund_filtered.iterrows()):
-        code = str(stock['股票代码']).zfill(6)
+        # 处理股票代码（补齐6位）
+        code_raw = str(stock['股票代码'])
+        code = code_raw.zfill(6)
         name = stock['股票简称']
         
         # 过滤科创板(688)和北交所(8/9开头)
