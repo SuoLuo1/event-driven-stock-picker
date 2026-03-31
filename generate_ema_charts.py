@@ -74,7 +74,7 @@ def get_stock_kline(symbol, days=120):
         print(f"❌ 读取{symbol}数据失败: {str(e)[:50]}")
         return None
 
-def generate_chart_image(df, symbol, name, ema20_val=None, ema60_val=None):
+def generate_chart_image(df, symbol, name, industry="", ema20_val=None, ema60_val=None):
     """
     生成K线图像（基于CryptoScanner/all.py风格）
     """
@@ -136,9 +136,10 @@ def generate_chart_image(df, symbol, name, ema20_val=None, ema60_val=None):
             }
         )
         
-        # 生成文件名
+        # 生成文件名（加上行业）
         safe_name = name.replace('/', '-').replace(' ', '_')
-        output_file = os.path.join(OUTPUT_DIR, f"{symbol}_{safe_name}.png")
+        safe_industry = industry.replace('/', '-').replace(' ', '_')[:10]  # 行业名截取前10字符
+        output_file = os.path.join(OUTPUT_DIR, f"{symbol}_{safe_name}_{safe_industry}.png")
         
         # 绘制并保存
         mpf.plot(
@@ -147,7 +148,7 @@ def generate_chart_image(df, symbol, name, ema20_val=None, ema60_val=None):
             style=s,
             addplot=apds,
             volume=True,
-            title=f"\n{symbol} {name} - EMA Breakout",
+            title=f"\n{symbol} {name}\n行业: {industry} - EMA Breakout",
             figsize=(18, 10),
             datetime_format='%m-%d',
             tight_layout=True,
@@ -191,8 +192,9 @@ def main():
     for idx, row in df.iterrows():
         symbol = row['代码']
         name = row['名称']
+        industry = row.get('行业', '')  # 获取行业信息
         
-        print(f"[{idx+1}/{len(df)}] 处理 {symbol} {name}...")
+        print(f"[{idx+1}/{len(df)}] 处理 {symbol} {name} ({industry})...")
         
         # 获取K线数据
         kline_df = get_stock_kline(symbol, DAYS_OF_DATA)
@@ -201,8 +203,8 @@ def main():
             fail_count += 1
             continue
         
-        # 生成图表
-        result = generate_chart_image(kline_df, symbol, name, 
+        # 生成图表（传入行业）
+        result = generate_chart_image(kline_df, symbol, name, industry,
                                       row.get('EMA20'), row.get('EMA60'))
         if result:
             success_count += 1
